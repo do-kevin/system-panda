@@ -1,34 +1,26 @@
 import express from "express";
 import { ifAuthenticated } from "../middlewares/index.js";
-import { Context, Models, Webhook, getConfigStore, getDataStore } from "../../util/index.js";
+import { Context, Webhook, getConfigStore, getDataStore } from "../../util/index.js";
 import { collection } from "../controllers/index.js";
 import { authRouter } from "./auth.js";
 import { pluginsRouter } from "./plugins.js";
 import { webhook } from "../../webhooks/index.js";
 const apiRouter = express.Router();
 
-function apiHandler(ctx: Context, globalWebhooks: Webhook[], models: Models) {
+function apiHandler(ctx: Context, globalWebhooks: Webhook[]) {
 	const {
 		settings: { healthCheck },
 		content: { collections },
 	} = getConfigStore();
-	const { prisma } = getDataStore();
+	const { prisma, models } = getDataStore();
 
 	apiRouter
 		// ...
-		.get("/metadata", (req, res) => {
-			res.json({
-				data: {
-					plugins: getDataStore().pluginStore,
-					collections: Object.entries(collections).map(([k, v]) => "/" + (v.slug || k)),
-				},
-			});
-		})
 		.use("/auth", authRouter)
 		.use("/plugins", ifAuthenticated, pluginsRouter);
 
 	if (healthCheck !== false)
-		apiRouter.get(healthCheck?.path || "/health-check", (req, res) => {
+		apiRouter.get(healthCheck?.path || "/health-check", (_, res) => {
 			res.json(
 				healthCheck?.data || {
 					status: "healthy",
@@ -37,6 +29,15 @@ function apiHandler(ctx: Context, globalWebhooks: Webhook[], models: Models) {
 				}
 			);
 		});
+
+	apiRouter.get("/collections", ifAuthenticated, (_, res) =>
+		res.json(
+			Object.entries(collections).map(([k, v]) => ({
+				slug: v.slug || k,
+				fields: v.fields,
+			}))
+		)
+	);
 
 	for (const [cKey, cValue] of Object.entries(collections)) {
 		const { hooks, slug, webhooks } = cValue;
@@ -48,7 +49,8 @@ function apiHandler(ctx: Context, globalWebhooks: Webhook[], models: Models) {
 
 		apiRouter.all(
 			`/collections/${slugOrKey}`,
-			collection(query, ctx, hooks, models, mergedWebhooks, cKey, slugOrKey)
+			ifAuthenticated,
+			collection(query, ctx, hooks, models || {}, mergedWebhooks, cKey, slugOrKey)
 		);
 	}
 

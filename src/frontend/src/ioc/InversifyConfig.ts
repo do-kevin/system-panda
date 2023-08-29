@@ -4,9 +4,10 @@ import { AuthPresenter } from "../auth/auth.presenter";
 import { AuthenticationRepository } from "../auth/authentication.repository";
 import { MetaDataPresenter } from "../metadata/metadata.presenter";
 import { MetaDataRepository } from "../metadata/metadata.repository";
+import { FakeHttpGateway } from "../shared/gateways/fakehttp.gateway";
 import { HttpGateway } from "../shared/gateways/http.gateway";
 import { Types } from "../shared/types/ioc-types";
-import { FakeHttpGateway } from "../shared/gateways/fakehttp.gateway";
+import { CollectionRepository } from "../modules/collection/collection.repository";
 
 export class InversifyConfig {
 	container: InstanceType<typeof Container>;
@@ -36,5 +37,7 @@ export class InversifyConfig {
 
 		this.container.bind<MetaDataRepository>(MetaDataRepository).toSelf().inSingletonScope();
 		this.container.bind<MetaDataPresenter>(MetaDataPresenter).toSelf().inTransientScope();
+
+		this.container.bind<CollectionRepository>(CollectionRepository).toSelf().inSingletonScope();
 	}
 }

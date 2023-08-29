@@ -22,7 +22,7 @@ import {
 	PrismaClientValidationError,
 	PrismaClientOptions,
 } from "@prisma/client/runtime/index.js";
-import { crudMapping, cmsTablePrefix } from "./index.js";
+import { crudMapping } from "./index.js";
 import { DeepReadonly } from "utility-types";
 import { SessionData } from "express-session";
 
@@ -71,6 +71,8 @@ type WebhookFunc = (webhook: Webhook) => {
 /* ******************** */
 
 /* ********** CONTEXT ********** */
+type CurrentHook = keyof CRUDHooks;
+
 type Context = {
 	prisma: PrismaClient;
 	collections: Collections;
@@ -81,7 +83,7 @@ type Context = {
 	sessionData: Record<string, unknown> | undefined;
 	bools: Record<string, boolean>;
 	util: {
-		currentHook: keyof CRUDHooks;
+		currentHook: CurrentHook;
 	};
 	customVars: Record<string, unknown>;
 };
@@ -98,6 +100,17 @@ type CRUDHooks = {
 	afterOperation?: AfterOperation[];
 };
 
+type HookOperationArgs = {
+	ctx: {
+		express: {
+			req: ExpressRequest;
+			res: ExpressResponse;
+		};
+		customVars: Record<string, unknown>;
+	};
+	existingData?: ExistingData;
+	inputData?: InputData;
+} & CRUD_Operation;
 type ReadonlyHookOperationArgs = {
 	ctx: DeepReadonly<Omit<Context, "express" | "customVars">> & {
 		express: {
@@ -239,12 +252,7 @@ type AuthFields = {
 	roleField?: string;
 };
 
-type Models = { [key: string]: { [key: string]: undefined } };
-
-type InternalTablesKeys =
-	| `${typeof cmsTablePrefix}_users`
-	| `${typeof cmsTablePrefix}_sessions`
-	| `${typeof cmsTablePrefix}_plugins`;
+type CollectionSkeletons = Record<string, Record<string, undefined>>;
 
 type Settings = {
 	db: Database;
@@ -254,6 +262,13 @@ type Settings = {
 	extendServer?: ExtendServer;
 	disableAdminUI?: boolean;
 	isAccessAllowed?: (options: Context) => boolean;
+	/**
+	 * default: {
+	 *     status: "healthy",
+	 *     timestamp: new Date().toISOString(),
+	 *     uptime: process.uptime()
+	 * }
+	 */
 	healthCheck?:
 		| {
 				path?: string;
@@ -275,9 +290,16 @@ type SP = (args: Options) => Promise<void>;
 /* ********** MISC. ********** */
 type MutableDataStore = Partial<{
 	prisma: PrismaClient;
-	models: Models;
+	models: CollectionSkeletons;
 	initFirstAuth: AuthSession["initFirstAuth"];
-}> & { authFields: Required<AuthFields>; pluginStore: ActiveInactivePlugins };
+}> & {
+	authFields: Required<AuthFields>;
+	pluginStore: ActiveInactivePlugins;
+	normalizedCollections: {
+		visible: Collections;
+		internal: Collections;
+	};
+};
 
 type CRUD_Operation = {
 	readonly operation: "create" | "read" | "update" | "delete";
@@ -354,10 +376,11 @@ export {
 	AuthFields,
 	RelationField,
 	CustomSessionData,
-	Models,
+	CollectionSkeletons,
 	ExistingData,
 	InputData,
 	MutableDataStore,
 	CollectionMethod,
-	InternalTablesKeys,
+	CurrentHook,
+	HookOperationArgs,
 };
